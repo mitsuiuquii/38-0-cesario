@@ -1,0 +1,91 @@
+{
+  "theme": "dark",
+  "archetype": "Archetype 2: The Performance Pro (Modified for eSports/Brazilian Football)",
+  "vibe": "Stadium Night / eSports Hype / Premium Broadcast",
+  "colors": {
+    "background_base": "#0A0A0A",
+    "surface_card": "#121926",
+    "surface_glass": "rgba(18, 25, 38, 0.7)",
+    "primary_accent": "#39FF14",
+    "secondary_accent": "#FFD700",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#94A3B8",
+    "border_subtle": "rgba(255, 255, 255, 0.1)",
+    "pitch_grass": "#0B2615",
+    "pitch_lines": "rgba(57, 255, 20, 0.4)",
+    "zones": {
+      "libertadores_top_6": "#00FF66",
+      "sul_americana_7_12": "#007AFF",
+      "relegation_bottom_4": "#FF3B30",
+      "neutral_mid": "#94A3B8"
+    }
+  },
+  "typography": {
+    "primary_heading": "Anton",
+    "secondary_data": "Oswald",
+    "body_font": "Outfit",
+    "hierarchy_rules": {
+      "h1": "text-5xl sm:text-6xl tracking-tight uppercase font-['Anton']",
+      "h2": "text-3xl sm:text-4xl tracking-tight uppercase font-['Anton']",
+      "h3": "text-2xl font-bold font-['Oswald'] uppercase tracking-wide",
+      "body": "text-base font-['Outfit'] text-slate-300",
+      "data_numbers": "font-['Oswald'] tracking-wider",
+      "ovr_badge": "text-3xl font-['Anton']"
+    }
+  },
+  "layout_and_spacing": {
+    "spacing_scale": "Generous (p-6, p-8) for lobbies, tight (p-2, gap-2) for draft player lists and match simulation tables.",
+    "dashboard_grid": "Mode B: 'Control Room' Grid - Pitch Visualizer takes col-span-2 or center stage, available players take narrow tall columns.",
+    "general_alignment": "Left-align dense text and tables. Center-align main hype elements (Draft turn banners, Champion announcements)."
+  },
+  "surface_strategies": {
+    "app_background": "Stadium background image with heavy black overlay (bg-black/80) to maintain deep contrast and legibility.",
+    "player_cards": "Glassmorphism (bg-white/5 backdrop-blur-md) with sharp 1px border. High OVR players get a metallic or neon glow border (shadow-[0_0_15px_rgba(255,215,0,0.5)]).",
+    "pitch_visualizer": "Solid deep green background with crisp semi-transparent neon lines. Player slots are distinct drop zones with dashed borders until filled."
+  },
+  "components_strategy": {
+    "Lobby": "Dark neon sports betting/FUT vibe. Large room code. Toggle switches (Shadcn customized) for OVR visibility. Formation selector using toggle groups.",
+    "PitchVisualizer": "Vertical orientation CSS layout. Lines drawn using div borders or SVGs. Formations (4-3-3, 4-4-2, etc.) dynamically update absolute positioning or CSS grid slots.",
+    "DraftCard": "FUT-style. Top left OVR, Club Logo in background, Player Name at bottom. Position label colored by area (ATT=Blue, MID=Green, DEF=Yellow).",
+    "MatchSimulation": "List of active matches with 'live' pulsing red dots. Scores in Oswald. Goals trigger a momentary invert/flash animation of the match row.",
+    "StandingsTable": "Dense. border-collapse. Row styling: left border colored by zone (Libertadores/Relegation). Current user's team row highlighted with a subtle bg-white/10."
+  },
+  "animations": {
+    "DraftPick": "Framer Motion 3D card flip on selection. 'It is your turn' banner slides down with aggressive ease-out.",
+    "GoalFlash": "Keyframe animation: bg-white/20 flash + text scale up + drop-shadow glow.",
+    "Clocks": "Pulsing opacity on the apostrophe (e.g., 89').",
+    "SpeedSelector": "Smooth transition between Slow/Fast/Turbo states. Turbo adds a slight chromatic aberration or speed line effect if possible, or just accelerates standard ticking."
+  },
+  "icons_and_assets": {
+    "library": "lucide-react (default) or @phosphor-icons/react for sports weight.",
+    "rules": "Icons should be bold/duotone to match the gaming aesthetic."
+  },
+  "testing": {
+    "required_attributes": "All interactive elements MUST have data-testid attributes (e.g., data-testid='draft-player-card', data-testid='start-sim-button')."
+  },
+  "media": {
+    "backgrounds": [
+      {
+        "category": "stadium_background",
+        "url": "https://images.unsplash.com/photo-1679391029864-d46f366a456b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTZ8MHwxfHNlYXJjaHwxfHxmb290YmFsbCUyMHN0YWRpdW0lMjBuaWdodCUyMGRhcmslMjBsaWdodHN8ZW58MHx8fHwxNzgxNjE3MzQ2fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Night soccer stadium with dark lights. Use with bg-black/80 overlay.",
+        "usage": "Main app background, fixed and covers viewport."
+      },
+      {
+        "category": "alternative_stadium",
+        "url": "https://images.pexels.com/photos/14460275/pexels-photo-14460275.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Vibrant night soccer game.",
+        "usage": "Use as fallback or for final champion screen background."
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Ensure FastAPI + MongoDB + WebSockets are used for backend.",
+    "Use standard HTML/Tailwind for game screens (Pitch, Draft) where Shadcn might be too rigid. Use Shadcn for lobbies, dialogs, forms, toggles.",
+    "Implement the pitch visualizer using a parent relative container and absolute positioned player slots based on the chosen formation coordinates.",
+    "Ensure the match engine runs sequentially up to 38 rounds, emitting websocket events for goals and time progression.",
+    "Font loading: Import Anton, Oswald, and Outfit from Google Fonts in the main index.html or CSS.",
+    "Add tailwind rules for data-testid targeting if needed, but primarily use them for test hooks.",
+    "Language must be Portuguese (BR) everywhere."
+  ]
+}
