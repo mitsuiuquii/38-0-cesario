@@ -184,13 +184,18 @@ async def broadcast(code: str, kind: str = "state", payload: Optional[dict] = No
 
 # ----------------------------- Draft helpers -----------------------------
 def assign_random_club_for_turn(room: dict) -> str:
-    """Random squad label that has at least one valid player for the picker's open slots."""
+    """Random squad label that has at least one valid player for the picker's open slots.
+    Ensures no duplicate squad-label across all human teams (same league prevents squad duplication)."""
     team = room["teams"][room["draftOrder"][room["currentTurnIdx"]]]
     open_slots = [s for s in FORMATIONS[team["formation"]] if team["squad"][s["id"]] is None]
     drafted_names = room["draftedPlayerNames"]
+    used_labels = room.get("usedSquadLabels", set())  # Squad labels already taken by other teams
+    
     labels = list(all_squad_labels())
     random.shuffle(labels)
     for label in labels:
+        if label in used_labels:
+            continue  # Skip labels already used by other human teams
         squad = get_squad_by_label(label)
         for p in squad["players"]:
             if p["name"] in drafted_names:
@@ -316,6 +321,7 @@ async def create_room(req: CreateRoomReq):
         "pickRound": 0,
         "picksMade": 0,
         "draftedPlayerNames": set(),
+        "usedSquadLabels": set(),  # Track squad_label used by each human team
         "assignedClub": None,
         "availablePlayers": [],
         "speed": "fast",
@@ -400,6 +406,7 @@ async def start_draft(code: str, req: HostUpdateReq):
     room["pickRound"] = 0
     room["picksMade"] = 0
     room["draftedPlayerNames"] = set()
+    room["usedSquadLabels"] = set()  # Track squad_label used by each human team
     room["sim"] = None
     room["assignedClub"] = assign_random_club_for_turn(room)
     room["availablePlayers"] = players_for_assigned_club(room)
@@ -427,6 +434,14 @@ async def draft_pick(code: str, req: DraftPickReq):
         raise HTTPException(400, "Posição inválida para este jogador")
     if team["squad"][req.slotId] is not None:
         raise HTTPException(400, "Posição já preenchida")
+    
+    # Mark squad_label as used by this team (only on first pick from that squad)
+    squad_label = card.get("squad_label")
+    if squad_label and squad_label not in room.get("usedSquadLabels", set()):
+        if "usedSquadLabels" not in room:
+            room["usedSquadLabels"] = set()
+        room["usedSquadLabels"].add(squad_label)
+    
     team["squad"][req.slotId] = {
         "id": card["id"], "name": card["name"], "ovr": card["ovr"],
         "positions": card["positions"], "squad_label": card["squad_label"],
@@ -1198,6 +1213,7 @@ async def restart_room(code: str, req: HostUpdateReq):
     room["pickRound"] = 0
     room["picksMade"] = 0
     room["draftedPlayerNames"] = set()
+    room["usedSquadLabels"] = set()  # Reset squad label tracking
     room["assignedClub"] = None
     room["availablePlayers"] = []
     room["sim"] = None
