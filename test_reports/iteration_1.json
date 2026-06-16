@@ -1,0 +1,52 @@
+{
+  "summary": "Full backend + frontend testing of 38-0 Brasil MVP. 23/23 pytest tests passed (REST + draft snake order + 38-round turbo simulation + WS state/ping/broadcast). Frontend Home, Room, and Draft screens fully functional with real-time multi-player WS sync. One critical backend bug fixed: pick_random_npc_squad raised KeyError because it expected enriched player keys ('id','positions') while server.py passed raw squad players ({name,pos,ovr}). Fix applied to match_engine.py to accept both shapes — start-sim now succeeds and full 38-round turbo simulation finishes with correct standings invariants (P==W+D+L, P==38, Pts==3W+D, GD==GF-GA, league-wide Pts conservation).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/rooms/{code}/start-sim",
+        "issue": "KeyError 'id' in match_engine.pick_random_npc_squad — server passed raw squad players (name/pos/ovr) but function expected enriched players (id/positions). Caused 500 every time host tried to start the simulation. Fix applied in /app/backend/match_engine.py to support both shapes; please review and either keep the compatibility shim or normalize the call site in server.py.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "WebSocket initial connect",
+        "issue": "Console warning 'WebSocket is closed before the connection is established.' fires once on mount. State still syncs correctly via auto-reconnect in useRoomSocket. Likely caused by React StrictMode double-mount or unmount during route transition. Non-blocking but noisy.",
+        "affected_selectors": []
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_brasil38.py",
+    "/app/backend/tests/pytest.ini",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Review/finalize the match_engine.pick_random_npc_squad fix — current shim accepts both raw and enriched players. Consider normalizing players to a single shape (server.py currently constructs ids/positions in two ways across draft path and NPC fill path).",
+    "(Optional) Suppress benign initial WS close warning by setting reconnectRef only after first onopen, or by guarding StrictMode double-mount."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 679 lines — close to the 700-line guideline. Consider splitting REST handlers, sim loop, and helpers into modules.",
+    "Player ID composition is duplicated in 3 places (draft pick path, NPC squad build, and fallback NPC). A single helper player_id(squad, p) would prevent the bug encountered.",
+    "draftedPlayerIds is a set serialized via list(...) in public_room — good. But room dict stores it as a set so json snapshots can't be deep-copied through json directly elsewhere; not currently used so OK.",
+    "Frontend useRoomSocket has no exponential backoff — fixed 1200ms retry could storm the server if backend is down.",
+    "No data-testid for join/create error messages — UI tests can't easily assert error states like 'wrong password'.",
+    "CORS allow_origins defaults to '*' with allow_credentials=True — browsers will reject that combo. Not blocking now (no cookies in use), but a footgun for future auth."
+  ],
+  "updated_files": [
+    "/app/backend/match_engine.py (fixed pick_random_npc_squad to accept raw squad players)",
+    "/app/backend/tests/test_brasil38.py (new comprehensive pytest suite)",
+    "/app/backend/tests/pytest.ini (asyncio_mode=auto)"
+  ],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "100% on tested flows (home->create->room->draft + WS sync)"},
+  "seed_data_creation": "Tests create ephemeral rooms via REST; in-memory state is wiped on backend restart. No persistent seed needed.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend uses in-memory ROOMS dict — restarts wipe state. Full 38-round turbo sim takes ~190-225s; the pytest fixture polls every 3s up to 320s. WebSocket URL is wss://<host>/api/ws/{CODE}?playerId={PID} — initial message is always {type:'state'}. Frontend draft testid pattern: draft-card-{cardId}, pitch-empty-{slotId}, pitch-slot-{slotId}. Clicking a draft card on the picker's page reveals empty pitch slots; clicking an empty slot performs the pick and broadcasts state to all subscribers. To run full sim UI test you'd need to script 22 picks (2 players * 11) then start-sim with turbo — backend tests already cover this without UI.",
+  "rca of the issue": "Root cause of start-sim 500: server.py line 410 calls pick_random_npc_squad(squad['players'], used_pids, slots) where squad['players'] is the raw SQUADS list ({name, pos, ovr}) but pick_random_npc_squad accessed p['id'] and p['positions'] which only exist on the enriched output of all_players_flat(). Reproduction: drive any room to 'ready_to_sim' and POST /api/rooms/{code}/start-sim — backend logs KeyError 'id' and returns 500. Mitigation applied: pick_random_npc_squad now derives id from p.get('id') or p.get('name') and positions from p.get('positions') or p.get('pos'), making it shape-agnostic. After fix, full 38-round turbo simulation completes successfully and standings satisfy all invariants verified by test_finished_sim_standings."
+}
