@@ -101,14 +101,21 @@ export default function Simulation() {
 
   const startSim = async () => {
   try {
-    await api.startSim(code, playerId);
-  } catch (e) {
-    // SE O ERRO FOR 400 PORQUE JÁ ESTÁ SIMULANDO, NÃO EXIBA O TOAST DE ERRO!
-    if (e.response?.status === 400) {
-      console.log("A simulação já foi iniciada e está rodando!");
-      return; 
+    const response = await api.startSim(code, playerId);
+    
+    // Se o backend retornar os dados atualizados da sala na resposta, 
+    // nós atualizamos manualmente para não depender do WebSocket cair.
+    if (response?.data) {
+      // Caso sua API retorne a sala atualizada, descomente a linha abaixo:
+      // setState(response.data); 
     }
     
+    toast.success("Temporada iniciada!");
+  } catch (e) {
+    // Se der erro 400 porque já está rodando, podemos ignorar e deixar fluir
+    if (e.response?.status === 400) {
+      return;
+    }
     toast.error(e.response?.data?.detail || "Erro ao iniciar simulação");
   }
 };
