@@ -438,15 +438,45 @@ async def ws_endpoint(ws: WebSocket, code: str, playerId: Optional[str] = None):
 
 
 # ----------------------------- Mount + CORS -----------------------------
-app.include_router(api)
-
+# IMPORTANTE: O CORS precisa ser adicionado ANTES das rotas de WebSocket e do include_router
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://38-0-cesarioo.vercel.app",  # Seu link de produção da Vercel
-        "http://localhost:3000",             # Seu link local
+        "http://localhost:3000",             # Seu link local de testes
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(api)
+
+
+# ----------------------------- WebSocket DIRETO NO APP -----------------------------
+# Colocando direto no 'app', o FastAPI gerencia o Handshake e os Headers do Render perfeitamente
+@app.websocket("/api/ws/{code}")
+async def ws_endpoint(ws: WebSocket, code: str, playerId: Optional[str] = None):
+    code = code.upper()
+    await ws.accept()
+    if code not in ROOMS:
+        await ws.send_json({"type": "error", "payload": {"msg": "Sala não encontrada"}})
+        await ws.close()
+        return
+    ws._player_id = playerId
+    WS_CONNS.setdefault(code, []).append(ws)
+    try:
+        await ws.send_json({"type": "state", "payload": public_room(ROOMS[code], playerId)})
+        while True:
+            data = await ws.receive_json()
+            if data.get("type") == "ping":
+                await ws.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        log.warning(f"WS error {code}: {e}")
+    finally:
+        try:
+            WS_CONNS[code].remove(ws)
+        except ValueError:
+            pass
