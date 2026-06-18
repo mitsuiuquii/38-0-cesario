@@ -410,7 +410,7 @@ async def restart(code: str, inp: RestartInput):
 
 
 # ----------------------------- WebSocket -----------------------------
-@app.websocket("/api/ws/{code}")
+@api.websocket("/ws/{code}")
 async def ws_endpoint(ws: WebSocket, code: str, playerId: Optional[str] = None):
     code = code.upper()
     await ws.accept()
