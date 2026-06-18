@@ -453,21 +453,35 @@ app.add_middleware(
 app.include_router(api)
 
 
+from fastapi import WebSocket, WebSocketDisconnect, Query
+import asyncio
+
 # ----------------------------- WebSocket DIRETO NO APP -----------------------------
-# Colocando direto no 'app', o FastAPI gerencia o Handshake e os Headers do Render perfeitamente
 @app.websocket("/api/ws/{code}")
-async def ws_endpoint(ws: WebSocket, code: str, playerId: Optional[str] = None):
+async def ws_endpoint(ws: WebSocket, code: str):
     code = code.upper()
     await ws.accept()
+    
+    # Extrai o playerId manualmente dos query params da URL de forma segura
+    player_id = ws.query_params.get("playerId")
+    ws._player_id = player_id
+    
     if code not in ROOMS:
-        await ws.send_json({"type": "error", "payload": {"msg": "Sala não encontrada"}})
-        await ws.close()
+        try:
+            await ws.send_json({"type": "error", "payload": {"msg": "Sala não encontrada"}})
+            await ws.close()
+        except Exception:
+            pass
         return
-    ws._player_id = playerId
+        
     WS_CONNS.setdefault(code, []).append(ws)
+    
     try:
-        await ws.send_json({"type": "state", "payload": public_room(ROOMS[code], playerId)})
+        # Envia o estado inicial assim que conecta
+        await ws.send_json({"type": "state", "payload": public_room(ROOMS[code], player_id)})
+        
         while True:
+            # Mantém a conexão viva ouvindo mensagens
             data = await ws.receive_json()
             if data.get("type") == "ping":
                 await ws.send_json({"type": "pong"})
@@ -477,6 +491,7 @@ async def ws_endpoint(ws: WebSocket, code: str, playerId: Optional[str] = None):
         log.warning(f"WS error {code}: {e}")
     finally:
         try:
-            WS_CONNS[code].remove(ws)
-        except ValueError:
+            if code in WS_CONNS and ws in WS_CONNS[code]:
+                WS_CONNS[code].remove(ws)
+        except Exception:
             pass
