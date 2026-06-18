@@ -406,58 +406,70 @@ def build_league_teams(room: dict) -> List[dict]:
 
     for t in room["teams"]:
         league_teams.append({
-            "id": t["id"], "teamName": t["teamName"], "isNpc": False, "country": "BRA", "color": "#39FF14", "accent": "#FFD700",
-            "ovr": round(team_ovr(t["squad"]), 1), "squad": t["squad"], "formation": t["formation"], "label": None,
+            "id": t["id"], 
+            "teamName": t["teamName"], 
+            "isNpc": False,
+            "country": "BRA", 
+            "color": "#39FF14", 
+            "accent": "#FFD700",
+            "ovr": round(team_ovr(t["squad"]), 1), 
+            "squad": t["squad"],
+            "formation": t["formation"], 
+            "label": None,
         })
 
     candidate_labels = [s["label"] for s in SQUADS if s["label"] not in used_labels]
     random.shuffle(candidate_labels)
     npc_idx = 0
-    
-    # 1. Tenta preencher usando os Squads/Labels disponíveis
+
     while len(league_teams) < LEAGUE_SIZE and candidate_labels:
         chosen = None
         for label in list(candidate_labels):
             built = make_team_from_squad_label(label, random.choice(list(FORMATIONS.keys())), blocked_names_for_npc)
-            if built is None: continue
-            chosen = built
-            candidate_labels.remove(label)
-            used_labels.add(label)
-            break
-        if not chosen:
-            for label in list(candidate_labels):
-                built = make_team_from_squad_label(label, "4-3-3", set())
-                if built is None: continue
+            if built is not None:
                 chosen = built
                 candidate_labels.remove(label)
                 used_labels.add(label)
-                break # Adicionado break para evitar bugs no loop interno
-        
-        # CORREÇÃO: Em vez de dar um 'break' geral e fechar o campeonato se não achar uma label,
-        # nós pulamos para a criação de robôs genéricos.
-        if not chosen: 
+                break
+
+        if not chosen:
+            for label in list(candidate_labels):
+                built = make_team_from_squad_label(label, "4-3-3", set())
+                if built is not None:
+                    chosen = built
+                    candidate_labels.remove(label)
+                    used_labels.add(label)
+                    break
+
+        if not chosen:
             break
-            
+
         sq = get_squad_by_label(chosen["label"])
         league_teams.append({
-            "id": f"npc_{npc_idx}", "teamName": chosen["label"], "isNpc": True, "country": "BRA", "color": sq["color"], "accent": sq["accent"],
-            "ovr": round(team_ovr(chosen["squad"]), 1), "squad": chosen["squad"], "formation": chosen["formation"], "label": chosen["label"],
+            "id": f"npc_{npc_idx}", 
+            "teamName": chosen["label"],
+            "isNpc": True, 
+            "country": "BRA", 
+            "color": sq["color"], 
+            "accent": sq["accent"],
+            "ovr": round(team_ovr(chosen["squad"]), 1), 
+            "squad": chosen["squad"], 
+            "formation": chosen["formation"], 
+            "label": chosen["label"],
         })
         npc_idx += 1
 
-    # 2. SEGUNDO LOOP (NOVO): Garante que a liga chegue a 20 times gerando bots genéricos se faltar espaço
     npc_backup_count = 1
     while len(league_teams) < LEAGUE_SIZE:
         formacao_aleatoria = random.choice(list(FORMATIONS.keys()))
         squad_vazio = empty_squad(formacao_aleatoria)
-        
         league_teams.append({
-            "id": f"npc_generic_{npc_idx}", 
+            "id": f"npc_generic_{npc_idx}_{uuid.uuid4().hex[:4]}",
             "teamName": f"Bot FC {npc_backup_count}", 
             "isNpc": True, 
             "country": "BRA", 
             "color": "#4A5568", 
-            "accent": "#CBD5E0",
+            "accent": "#CBD5E0", 
             "ovr": 75.0, 
             "squad": squad_vazio, 
             "formation": formacao_aleatoria, 
@@ -466,12 +478,12 @@ def build_league_teams(room: dict) -> List[dict]:
         npc_idx += 1
         npc_backup_count += 1
 
-    # Segurança para garantir número par (se LEAGUE_SIZE for 20, aqui nem vai mexer)
-    if len(league_teams) % 2 == 1: 
+    if len(league_teams) % 2 == 1:
         league_teams = league_teams[:-1]
-        
+
     random.shuffle(league_teams)
     return league_teams
+
 
 def build_intl_teams(used_labels: set, used_names: set, count: int) -> List[dict]:
     out = []
@@ -479,29 +491,54 @@ def build_intl_teams(used_labels: set, used_names: set, count: int) -> List[dict
     random.shuffle(intl_pool)
     label_pool = [s["label"] for s in SQUADS if s["label"] not in used_labels]
     random.shuffle(label_pool)
+    
     for i in range(count):
         club_name, country, color = intl_pool[i % len(intl_pool)]
-        built = None
+        
+        built = {
+            "squad": empty_squad("4-3-3"),
+            "formation": "4-3-3",
+            "label": None,
+            "ovr": 74.0
+        }
+        
+        has_chosen = False
         for label in list(label_pool):
             cand = make_team_from_squad_label(label, random.choice(list(FORMATIONS.keys())), used_names)
-            if cand is None: continue
-            built = cand
-            label_pool.remove(label)
-            used_labels.add(label)
-            break
-        if not built:
-            for label in list(label_pool):
-                cand = make_team_from_squad_label(label, "4-3-3", set())
-                if cand is None: continue
+            if cand is not None:
                 built = cand
                 label_pool.remove(label)
                 used_labels.add(label)
+                has_chosen = True
                 break
-        if not built: break
+                
+        if not has_chosen:
+            for label in list(label_pool):
+                cand = make_team_from_squad_label(label, "4-3-3", set())
+                if cand is not None:
+                    built = cand
+                    label_pool.remove(label)
+                    used_labels.add(label)
+                    break
+        
+        if built.get("label") is not None:
+            team_ovr_val = round(team_ovr(built["squad"]), 1)
+        else:
+            team_ovr_val = built["ovr"]
+        
         out.append({
-            "id": f"intl_{country.lower()}_{i}_{random.randint(1000,9999)}", "teamName": club_name, "isNpc": True, "country": country,
-            "color": color, "accent": "#FFFFFF", "ovr": round(team_ovr(built["squad"]), 1), "squad": built["squad"], "formation": built["formation"], "label": built["label"],
+            "id": f"intl_{country.lower()}_{i}_{random.randint(1000,9999)}", 
+            "teamName": club_name, 
+            "isNpc": True, 
+            "country": country,
+            "color": color, 
+            "accent": "#FFFFFF", 
+            "ovr": team_ovr_val, 
+            "squad": built["squad"], 
+            "formation": built["formation"], 
+            "label": built["label"],
         })
+        
     return out
 
 def pick_scorer(team_obj):
