@@ -798,7 +798,7 @@ def advance_to_next_competition(room: dict):
         sim["competitions"][next_id]["status"] = "ready"
     else: sim["active"] = "completed"
 
-@api.post("/rooms/{code}/init-season")
+@api.post("/rooms/{code}/start-sim")
 async def init_season(code: str, req: HostUpdateReq):
     code = code.upper()
     room = ROOMS.get(code)
