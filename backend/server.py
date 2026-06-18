@@ -873,22 +873,23 @@ async def init_season(code: str, req: HostUpdateReq):
     if not room: raise HTTPException(404, "Sala não encontrada")
     if req.playerId != room["hostId"]: raise HTTPException(403, "Somente anfitrião")
     if room["status"] != "ready_to_sim": raise HTTPException(400, "Draft incompleto")
-    
+
     league_teams = build_league_teams(room)
     room["leagueTeams"] = league_teams
-    room["fixtures"] = generate_fixtures(list(league_teams.keys()))
+    # CORREÇÃO AQUI: Como league_teams é uma lista, pegamos o 'id' de cada item dela
+    room["fixtures"] = generate_fixtures([t["id"] for t in league_teams])
     room["currentRound"] = 1
     room["status"] = "simulating"
-    
+
     await broadcast_room(code, {
         "type": "room_update",
         "payload": room
     })
-    
+
     active = [p for p in room["players"] if not p.get("isNpc")]
     if code in SIM_TASKS and not SIM_TASKS[code].done():
         raise HTTPException(400, "Outra simulação em curso")
-    
+
     SIM_TASKS[code] = asyncio.create_task(simulate_phase(code, active))
     return {"ok": True}
 
