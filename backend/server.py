@@ -868,11 +868,11 @@ def advance_to_next_competition(room: dict):
 
 @api.post("/rooms/{code}/start-sim")
 async def init_season(code: str, req: HostUpdateReq):
-    code = code.upper() [cite: 410]
-    room = ROOMS.get(code) [cite: 410]
-    if not room: raise HTTPException(404, "Sala não encontrada") [cite: 410]
-    if req.playerId != room["hostId"]: raise HTTPException(403, "Somente anfitrião") [cite: 410]
-    if room["status"] != "ready_to_sim": raise HTTPException(400, "Draft incompleto") [cite: 410, 411]
+    code = code.upper()
+    room = ROOMS.get(code)
+    if not room: raise HTTPException(404, "Sala não encontrada")
+    if req.playerId != room["hostId"]: raise HTTPException(403, "Somente anfitrião")
+    if room["status"] != "ready_to_sim": raise HTTPException(400, "Draft incompleto")
     
     league_teams = build_league_teams(room) [cite: 411]
     sim_teams = {t["id"]: t for t in league_teams} [cite: 411]
