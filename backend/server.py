@@ -815,7 +815,7 @@ async def init_season(code: str, req: HostUpdateReq):
     await broadcast(code, "state")
     return {"ok": True}
 
-@api.post("/rooms/{code}/advance-round")
+@api.post("/rooms/{code}/next-round")
 async def advance_round(code: str, req: HostUpdateReq):
     code = code.upper()
     room = ROOMS.get(code)
