@@ -885,17 +885,19 @@ async def init_season(code: str, req: HostUpdateReq):
     room["currentRound"] = 1
     room["status"] = "simulating"
     
-    # CHAMADA CORRETA: broadcast_room conforme mapeado no seu arquivo backend
+    # Executa o broadcast usando a função correta
     try:
         await broadcast_room(code, {
             "type": "room_update",
             "payload": room
         })
     except NameError:
-        # Fallback de segurança caso a função global tenha outro nome no seu arquivo
         pass
     
-    active = [p for p in room["players"] if not p.get("isNpc")]
+    # CORREÇÃO AQUI: Busca 'users' (ou uma lista vazia caso não encontre) em vez de 'players'
+    room_users = room.get("users", room.get("players", []))
+    active = [p for p in room_users if not p.get("isNpc")]
+    
     if code in SIM_TASKS and not SIM_TASKS[code].done():
         raise HTTPException(400, "Outra simulação em curso")
     
