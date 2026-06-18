@@ -1,32 +1,23 @@
-"""38-0 Brasil — FastAPI backend with WebSocket realtime sync.
-
-Supports:
-  • Multi-competition season: Brasileirão Série A, Copa do Brasil,
-    Copa Libertadores, Copa Sul-Americana (sequential, all sharing
-    the drafted human teams + a shared NPC pool).
-  • Round-by-round (host clicks "Próxima Rodada" between phases).
-  • Strict player uniqueness by NAME across all eras / squads.
-  • No duplicate club-year squad in the same league (humans + NPCs).
-  • Play-again: reset the room back to lobby, keep the players.
-"""
-from fastapi import FastAPI, APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional, Dict, List
-from dotenv import load_dotenv
-from pathlib import Path
+"""38-0 Brasil — FastAPI backend with WebSocket realtime sync."""
 import os
 import asyncio
 import logging
 import random
 import string
-import time
 import uuid
+from typing import Optional, Dict, List
+from pathlib import Path
+from dotenv import load_dotenv
+
+from fastapi import FastAPI, APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from squads import SQUADS, all_players_flat, all_squad_labels, get_squad_by_label
 from match_engine import (
     FORMATIONS, slot_accepts_player, simulate_match_goals,
     team_ovr, generate_fixtures, pick_random_npc_squad,
+    MatchSimulator
 )
 
 ROOT_DIR = Path(__file__).parent
@@ -35,6 +26,7 @@ load_dotenv(ROOT_DIR / ".env")
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("38-0")
 
+# Criação ÚNICA do app principal e do roteador da API
 app = FastAPI(title="38-0 Cesario Match Simulator API")
 api = APIRouter(prefix="/api")
 
@@ -132,6 +124,10 @@ async def broadcast(code: str, msg_type: str):
                 pass
 
 # ----------------------------- API Routes -----------------------------
+@api.get("/")
+def health_check():
+    return {"status": "ok", "message": "Backend is running"}
+
 @api.post("/rooms")
 def create_room(inp: CreateRoomInput):
     code = generate_room_code()
@@ -408,42 +404,12 @@ async def restart(code: str, inp: RestartInput):
     await broadcast(code, "state")
     return {"ok": True}
 
-
-# ----------------------------- WebSocket -----------------------------
-@api.websocket("/ws/{code}")
-async def ws_endpoint(ws: WebSocket, code: str, playerId: Optional[str] = None):
-    code = code.upper()
-    await ws.accept()
-    if code not in ROOMS:
-        await ws.send_json({"type": "error", "payload": {"msg": "Sala não encontrada"}})
-        await ws.close()
-        return
-    ws._player_id = playerId
-    WS_CONNS.setdefault(code, []).append(ws)
-    try:
-        await ws.send_json({"type": "state", "payload": public_room(ROOMS[code], playerId)})
-        while True:
-            data = await ws.receive_json()
-            if data.get("type") == "ping":
-                await ws.send_json({"type": "pong"})
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:
-        log.warning(f"WS error {code}: {e}")
-    finally:
-        try:
-            WS_CONNS[code].remove(ws)
-        except ValueError:
-            pass
-
-
 # ----------------------------- Mount + CORS -----------------------------
-# IMPORTANTE: O CORS precisa ser adicionado ANTES das rotas de WebSocket e do include_router
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://38-0-cesarioo.vercel.app",  # Seu link de produção da Vercel
-        "http://localhost:3000",             # Seu link local de testes
+        "https://38-0-cesarioo.vercel.app",
+        "http://localhost:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -452,17 +418,12 @@ app.add_middleware(
 
 app.include_router(api)
 
-
-from fastapi import WebSocket, WebSocketDisconnect, Query
-import asyncio
-
 # ----------------------------- WebSocket DIRETO NO APP -----------------------------
 @app.websocket("/api/ws/{code}")
 async def ws_endpoint(ws: WebSocket, code: str):
     code = code.upper()
     await ws.accept()
     
-    # Extrai o playerId manualmente dos query params da URL de forma segura
     player_id = ws.query_params.get("playerId")
     ws._player_id = player_id
     
@@ -477,11 +438,8 @@ async def ws_endpoint(ws: WebSocket, code: str):
     WS_CONNS.setdefault(code, []).append(ws)
     
     try:
-        # Envia o estado inicial assim que conecta
         await ws.send_json({"type": "state", "payload": public_room(ROOMS[code], player_id)})
-        
         while True:
-            # Mantém a conexão viva ouvindo mensagens
             data = await ws.receive_json()
             if data.get("type") == "ping":
                 await ws.send_json({"type": "pong"})
