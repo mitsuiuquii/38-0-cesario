@@ -1,12 +1,12 @@
 import axios from "axios";
 
-// Link do seu backend no Render fixado para o deploy na Vercel funcionar direto
+// Link do seu backend no Render fixado diretamente
 export const BACKEND_URL = "https://three8-0-cesario.onrender.com";
 
 export const API = `${BACKEND_URL}/api`;
 
 export const wsUrl = (code, playerId) => {
-  // Transforma automaticamente o https:// em wss:// para o WebSocket do simulador funcionar
+  // Transforma o https:// em wss:// para o WebSocket do simulador funcionar em produção
   const wsBase = BACKEND_URL.replace(/^http/, "ws");
   return `${wsBase}/api/ws/${code}?playerId=${encodeURIComponent(playerId || "")}`;
 };
