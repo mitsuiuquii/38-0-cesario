@@ -873,10 +873,10 @@ async def init_season(code: str, req: HostUpdateReq):
     if not room: raise HTTPException(404, "Sala não encontrada")
     if req.playerId != room["hostId"]: raise HTTPException(403, "Somente anfitrião")
     if room["status"] != "ready_to_sim": raise HTTPException(400, "Draft incompleto")
-    
-    league_teams = build_league_teams(room) [cite: 411]
-    sim_teams = {t["id"]: t for t in league_teams} [cite: 411]
-    league_comp = make_league_comp(league_teams) [cite: 412]
+
+    league_teams = build_league_teams(room)
+    sim_teams = {t["id"]: t for t in league_teams}
+    league_comp = make_league_comp(league_teams)
     
     # PEGA OS JOGOS DA PRIMEIRA RODADA DA LIGA
     primeira_rodada = league_comp["phases"][0]["matches"]
