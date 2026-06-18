@@ -30,8 +30,9 @@ export default function Simulation() {
   const [matches, setMatches] = useState([]);
   const [flashIdx, setFlashIdx] = useState(null);
   const [goalFeed, setGoalFeed] = useState([]);
-  const [activeTab, setActiveTab] = useState("league");
-  const [showSquads, setShowSquads] = useState(false);
+  const [activeTab, setActiveTab] = useState("league"); // Já existente
+  const [showSquads, setShowSquads] = useState(false); // Já existente
+  const [localStatus, setLocalStatus] = useState(null); // <--- ADICIONE ESTA LINHA
   const flashTimer = useRef(null);
 
   const handleEvent = (msg) => {
@@ -84,7 +85,7 @@ export default function Simulation() {
   }, [playerId, nav]);
 
   const isHost = state?.hostId === playerId;
-  const status = state?.status;
+  const status = localStatus || state?.status;
   const sim = state?.sim;
   const activeComp = sim?.competitions?.[activeTab];
   const activeRunningCompId = sim?.active;
