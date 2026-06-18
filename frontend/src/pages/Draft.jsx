@@ -19,10 +19,10 @@ export default function Draft() {
   }, [playerId, nav]);
 
   useEffect(() => {
-    if (state?.status === "ready_to_sim" || state?.status === "simulating" || state?.status === "finished") {
-      nav(`/jogo/${code}`);
-    }
-  }, [state?.status, code, nav]);
+  if (state?.status === "ready_to_sim" || state?.status === "simulating" || state?.status === "finished") {
+    nav(`/simulation/${code}`); // <-- Altere de /jogo/ para a rota correta da tela Simulation.jsx
+  }
+}, [state?.status, code, nav]);
 
   // Toast when our turn starts
   const isMyTurn = useMemo(() => {
