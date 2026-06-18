@@ -7,3 +7,4 @@ black>=24.1.1
 isort>=5.13.2
 requests>=2.31.0
 python-multipart>=0.0.9
+websockets>=12.0
