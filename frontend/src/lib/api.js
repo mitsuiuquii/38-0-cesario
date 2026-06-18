@@ -1,15 +1,12 @@
 import axios from "axios";
 
-// Aceita tanto REACT_APP_BACKEND_URL quanto REACT_APP_API_URL. Se nenhum existir, usa o localhost.
-export const BACKEND_URL = 
-  process.env.REACT_APP_BACKEND_URL || 
-  process.env.REACT_APP_API_URL || 
-  "http://localhost:8000";
+// Link do seu backend no Render fixado para o deploy na Vercel funcionar direto
+export const BACKEND_URL = "https://three8-0-cesario.onrender.com";
 
 export const API = `${BACKEND_URL}/api`;
 
 export const wsUrl = (code, playerId) => {
-  // Melhora a substituição para cobrir 'http' -> 'ws' e 'https' -> 'wss'
+  // Transforma automaticamente o https:// em wss:// para o WebSocket do simulador funcionar
   const wsBase = BACKEND_URL.replace(/^http/, "ws");
   return `${wsBase}/api/ws/${code}?playerId=${encodeURIComponent(playerId || "")}`;
 };
