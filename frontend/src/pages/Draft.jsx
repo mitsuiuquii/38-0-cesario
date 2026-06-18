@@ -20,7 +20,7 @@ export default function Draft() {
 
   useEffect(() => {
   if (state?.status === "ready_to_sim" || state?.status === "simulating" || state?.status === "finished") {
-    nav(`/simulation/${code}`); // <-- Altere de /jogo/ para a rota correta da tela Simulation.jsx
+    nav(`/jogo/${code}`); // <--- Volte para /jogo/
   }
 }, [state?.status, code, nav]);
 

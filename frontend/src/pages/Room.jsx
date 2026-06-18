@@ -20,8 +20,8 @@ export default function Room() {
 
   useEffect(() => {
   if (state?.status === "drafting") nav(`/draft/${code}`);
-  if (state?.status === "ready_to_sim" || state?.status === "simulating") nav(`/simulation/${code}`); // <-- Altere aqui também
-  if (state?.status === "finished") nav(`/simulation/${code}`);
+  if (state?.status === "ready_to_sim" || state?.status === "simulating") nav(`/jogo/${code}`); // <--- Volte para /jogo/
+  if (state?.status === "finished") nav(`/jogo/${code}`);
 }, [state?.status, code, nav]);
 
   const myTeam = useMemo(
