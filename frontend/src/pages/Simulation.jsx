@@ -100,26 +100,56 @@ export default function Simulation() {
     }
   }, [sim?.active]);
 
+  // Nova função para buscar os dados direto do banco de dados se o socket cair
+  const fetchCurrentRoom = async () => {
+    try {
+      // Faz uma requisição GET para trazer a sala atualizada com as partidas criadas
+      const response = await api.getRoom(code); 
+      if (response?.data?.sim) {
+        // Se a sua API retornar a estrutura da simulação, você pode forçar as partidas na tela:
+        const activeCompId = response.data.sim.active || "league";
+        setActiveTab(activeCompId);
+        
+        const currentComp = response.data.sim.competitions?.[activeCompId];
+        const currentPhaseIdx = currentComp?.currentPhaseIdx ?? 0;
+        if (currentComp?.phases?.[currentPhaseIdx]?.matches) {
+          setMatches(currentComp.phases[currentPhaseIdx].matches);
+        }
+      }
+    } catch (e) {
+      console.error("Erro ao buscar dados de segurança da sala:", e);
+    }
+  };
+
+  // Efeito para disparar a busca caso o status mude para simulando
+  useEffect(() => {
+    if (status === "simulating") {
+      fetchCurrentRoom();
+    }
+  }, [status]);
+
   const startSim = async () => {
-  try {
-    const response = await api.startSim(code, playerId);
-    
-    // Se o backend retornar os dados atualizados da sala na resposta, 
-    // nós atualizamos manualmente para não depender do WebSocket cair.
-    if (response?.data) {
-      // Caso sua API retorne a sala atualizada, descomente a linha abaixo:
-      // setState(response.data); 
+    try {
+      await api.startSim(code, playerId);
+      
+      // 1. Força o status local para mudar a tela visualmente na hora
+      setLocalStatus("simulating"); 
+      
+      // 2. Busca as partidas criadas direto da API (banco de dados)
+      await fetchCurrentRoom(); 
+      
+      toast.success("Temporada iniciada!");
+    } catch (e) {
+      // Se der erro 400 porque já está rodando, faz a mesma coisa para destravar a tela
+      if (e.response?.status === 400) {
+        setLocalStatus("simulating");
+        await fetchCurrentRoom();
+        return;
+      }
+      toast.error(e.response?.data?.detail || "Erro ao iniciar simulação");
     }
-    
-    toast.success("Temporada iniciada!");
-  } catch (e) {
-    // Se der erro 400 porque já está rodando, podemos ignorar e deixar fluir
-    if (e.response?.status === 400) {
-      return;
-    }
-    toast.error(e.response?.data?.detail || "Erro ao iniciar simulação");
-  }
-};
+  };
+
   const nextRound = async () => {
     try {
       await api.nextRound(code, playerId);
@@ -127,6 +157,7 @@ export default function Simulation() {
       toast.error(e.response?.data?.detail || "Erro ao avançar");
     }
   };
+
   const changeSpeed = async (s) => {
     try {
       await api.setSpeed(code, playerId, s);
