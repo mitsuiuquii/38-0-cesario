@@ -100,12 +100,18 @@ export default function Simulation() {
   }, [sim?.active]);
 
   const startSim = async () => {
-    try {
-      await api.startSim(code, playerId);
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "Erro ao iniciar simulação");
+  try {
+    await api.startSim(code, playerId);
+  } catch (e) {
+    // SE O ERRO FOR 400 PORQUE JÁ ESTÁ SIMULANDO, NÃO EXIBA O TOAST DE ERRO!
+    if (e.response?.status === 400) {
+      console.log("A simulação já foi iniciada e está rodando!");
+      return; 
     }
-  };
+    
+    toast.error(e.response?.data?.detail || "Erro ao iniciar simulação");
+  }
+};
   const nextRound = async () => {
     try {
       await api.nextRound(code, playerId);
