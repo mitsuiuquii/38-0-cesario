@@ -1,9 +1,15 @@
 import axios from "axios";
 
-export const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+// Aceita tanto REACT_APP_BACKEND_URL quanto REACT_APP_API_URL. Se nenhum existir, usa o localhost.
+export const BACKEND_URL = 
+  process.env.REACT_APP_BACKEND_URL || 
+  process.env.REACT_APP_API_URL || 
+  "http://localhost:8000";
+
 export const API = `${BACKEND_URL}/api`;
 
 export const wsUrl = (code, playerId) => {
+  // Melhora a substituição para cobrir 'http' -> 'ws' e 'https' -> 'wss'
   const wsBase = BACKEND_URL.replace(/^http/, "ws");
   return `${wsBase}/api/ws/${code}?playerId=${encodeURIComponent(playerId || "")}`;
 };
