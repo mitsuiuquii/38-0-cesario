@@ -413,6 +413,8 @@ def build_league_teams(room: dict) -> List[dict]:
     candidate_labels = [s["label"] for s in SQUADS if s["label"] not in used_labels]
     random.shuffle(candidate_labels)
     npc_idx = 0
+    
+    # 1. Tenta preencher usando os Squads/Labels disponíveis
     while len(league_teams) < LEAGUE_SIZE and candidate_labels:
         chosen = None
         for label in list(candidate_labels):
@@ -429,8 +431,13 @@ def build_league_teams(room: dict) -> List[dict]:
                 chosen = built
                 candidate_labels.remove(label)
                 used_labels.add(label)
+                break # Adicionado break para evitar bugs no loop interno
+        
+        # CORREÇÃO: Em vez de dar um 'break' geral e fechar o campeonato se não achar uma label,
+        # nós pulamos para a criação de robôs genéricos.
+        if not chosen: 
             break
-        if not chosen: break
+            
         sq = get_squad_by_label(chosen["label"])
         league_teams.append({
             "id": f"npc_{npc_idx}", "teamName": chosen["label"], "isNpc": True, "country": "BRA", "color": sq["color"], "accent": sq["accent"],
@@ -438,7 +445,31 @@ def build_league_teams(room: dict) -> List[dict]:
         })
         npc_idx += 1
 
-    if len(league_teams) % 2 == 1: league_teams = league_teams[:-1]
+    # 2. SEGUNDO LOOP (NOVO): Garante que a liga chegue a 20 times gerando bots genéricos se faltar espaço
+    npc_backup_count = 1
+    while len(league_teams) < LEAGUE_SIZE:
+        formacao_aleatoria = random.choice(list(FORMATIONS.keys()))
+        squad_vazio = empty_squad(formacao_aleatoria)
+        
+        league_teams.append({
+            "id": f"npc_generic_{npc_idx}", 
+            "teamName": f"Bot FC {npc_backup_count}", 
+            "isNpc": True, 
+            "country": "BRA", 
+            "color": "#4A5568", 
+            "accent": "#CBD5E0",
+            "ovr": 75.0, 
+            "squad": squad_vazio, 
+            "formation": formacao_aleatoria, 
+            "label": None,
+        })
+        npc_idx += 1
+        npc_backup_count += 1
+
+    # Segurança para garantir número par (se LEAGUE_SIZE for 20, aqui nem vai mexer)
+    if len(league_teams) % 2 == 1: 
+        league_teams = league_teams[:-1]
+        
     random.shuffle(league_teams)
     return league_teams
 
@@ -800,20 +831,30 @@ def advance_to_next_competition(room: dict):
 
 @api.post("/rooms/{code}/start-sim")
 async def init_season(code: str, req: HostUpdateReq):
-    code = code.upper()
-    room = ROOMS.get(code)
-    if not room: raise HTTPException(404, "Sala não encontrada")
-    if req.playerId != room["hostId"]: raise HTTPException(403, "Somente anfitrião")
-    if room["status"] != "ready_to_sim": raise HTTPException(400, "Draft incompleto")
+    code = code.upper() [cite: 410]
+    room = ROOMS.get(code) [cite: 410]
+    if not room: raise HTTPException(404, "Sala não encontrada") [cite: 410]
+    if req.playerId != room["hostId"]: raise HTTPException(403, "Somente anfitrião") [cite: 410]
+    if room["status"] != "ready_to_sim": raise HTTPException(400, "Draft incompleto") [cite: 410, 411]
     
-    league_teams = build_league_teams(room)
-    sim_teams = {t["id"]: t for t in league_teams}
-    league_comp = make_league_comp(league_teams)
+    league_teams = build_league_teams(room) [cite: 411]
+    sim_teams = {t["id"]: t for t in league_teams} [cite: 411]
+    league_comp = make_league_comp(league_teams) [cite: 412]
     
-    room["sim"] = {"active": "league", "teams": sim_teams, "competitions": {"league": league_comp}, "currentMinute": 0, "currentMatches": []}
-    room["status"] = "simulating"
-    await broadcast(code, "state")
-    return {"ok": True}
+    # PEGA OS JOGOS DA PRIMEIRA RODADA DA LIGA
+    primeira_rodada = league_comp["phases"][0]["matches"]
+    
+    # SALVA NO ESTADO ENVIANDO A PRIMEIRA RODADA AO INVÉS DE LISTA VAZIA
+    room["sim"] = {
+        "active": "league", 
+        "teams": sim_teams, 
+        "competitions": {"league": league_comp}, 
+        "currentMinute": 0, 
+        "currentMatches": primeira_rodada
+    }
+    room["status"] = "simulating" [cite: 412]
+    await broadcast(code, "state") [cite: 412]
+    return {"ok": True} [cite: 412]
 
 @api.post("/rooms/{code}/next-round")
 async def advance_round(code: str, req: HostUpdateReq):
