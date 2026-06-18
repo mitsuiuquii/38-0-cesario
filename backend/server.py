@@ -881,7 +881,7 @@ async def init_season(code: str, req: HostUpdateReq):
     room["currentRound"] = 1
     room["status"] = "simulating"
 
-    await broadcast_room(code, {
+    await broadcast_to_room(code, {
         "type": "room_update",
         "payload": room
     })
