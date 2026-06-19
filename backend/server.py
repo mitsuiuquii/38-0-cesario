@@ -284,6 +284,13 @@ async def join_room(code: str, req: JoinRoomReq):
     await broadcast(code, "state")
     return {"code": code, "playerId": pid}
 
+@api.get("/rooms/{code}")
+async def get_room(code: str, playerId: Optional[str] = None):
+    room = ROOMS.get(code.upper())
+    if not room:
+        raise HTTPException(404, "Sala não encontrada")
+    return public_room(room, playerId)
+
 @api.post("/rooms/{code}/update-team")
 async def update_team(code: str, req: UpdateTeamReq):
     room = ROOMS.get(code.upper())
@@ -866,6 +873,12 @@ def advance_to_next_competition(room: dict):
         sim["competitions"][next_id]["status"] = "ready"
     else: sim["active"] = "completed"
 
+async def delayed_sim(code: str, comp_id: str):
+    await asyncio.sleep(0.5)  # deixa o broadcast chegar antes
+    comp = ROOMS[code]["sim"]["competitions"][comp_id]
+    comp["currentPhaseIdx"] = 0
+    await simulate_phase(code, comp_id)
+
 @api.post("/rooms/{code}/start-sim")
 async def init_season(code: str, req: HostUpdateReq):
     code = code.upper()
@@ -894,8 +907,7 @@ async def init_season(code: str, req: HostUpdateReq):
 
     await broadcast(code, "state")
 
-    league_comp["currentPhaseIdx"] = 0
-    SIM_TASKS[code] = asyncio.create_task(simulate_phase(code, "league"))
+    SIM_TASKS[code] = asyncio.create_task(delayed_sim(code, "league"))
     return {"ok": True}
 
 @api.post("/rooms/{code}/next-round")
