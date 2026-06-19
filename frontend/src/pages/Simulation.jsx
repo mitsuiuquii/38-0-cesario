@@ -43,37 +43,42 @@ export default function Simulation() {
       // auto-focus the active tab
       if (msg.payload.comp_id) setActiveTab(msg.payload.comp_id);
     } else if (msg.type === "tick") {
-      setMinute(msg.payload.minute);
-      setMatches((prev) =>
-        prev.map((m, idx) => {
-          const tickEv = msg.payload.events.filter((e) => e.match_idx === idx);
-          const [hs, as_] = msg.payload.scores[idx] || [m.home_score, m.away_score];
-          return {
-            ...m,
-            home_score: hs,
-            away_score: as_,
-            currentEvents: [...(m.currentEvents || []), ...tickEv.map((e) => e.event)],
-          };
-        })
+  setMinute(msg.payload.minute);
+  setMatches((prev) =>
+    prev.map((m, idx) => {
+      const tickEv = msg.payload.events.filter((e) => e.matchIdx === idx);
+      let hs = m.home_score;
+      let as_ = m.away_score;
+      if (tickEv.length > 0) {
+        hs = tickEv[tickEv.length - 1].home_score ?? hs;
+        as_ = tickEv[tickEv.length - 1].away_score ?? as_;
+      }
+      return {
+        ...m,
+        home_score: hs,
+        away_score: as_,
+        currentEvents: [...(m.currentEvents || []), ...tickEv.map((e) => e.event)],
+      };
+    })
+  );
+  msg.payload.events.forEach((e) => {
+    if (e.event && !e.event.flavor) {
+      setFlashIdx(e.matchIdx);
+      clearTimeout(flashTimer.current);
+      flashTimer.current = setTimeout(() => setFlashIdx(null), 1300);
+      setGoalFeed((prev) =>
+        [
+          {
+            key: `${e.matchIdx}-${e.event.minute}-${Math.random()}`,
+            minute: e.event.minute,
+            scorer: e.event.player_name,
+          },
+          ...prev,
+        ].slice(0, 30)
       );
-      msg.payload.events.forEach((e) => {
-        if (e.event && !e.event.flavor) {
-          setFlashIdx(e.match_idx);
-          clearTimeout(flashTimer.current);
-          flashTimer.current = setTimeout(() => setFlashIdx(null), 1300);
-          setGoalFeed((prev) =>
-            [
-              {
-                key: `${e.match_idx}-${e.event.minute}-${Math.random()}`,
-                minute: e.event.minute,
-                scorer: e.event.scorer,
-              },
-              ...prev,
-            ].slice(0, 30)
-          );
-        }
-      });
-    } else if (msg.type === "sim_complete") {
+    }
+  });
+} else if (msg.type === "sim_complete") {
       toast.success("Temporada finalizada!");
     }
   };
