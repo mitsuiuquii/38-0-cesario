@@ -709,7 +709,9 @@ def generate_next_knockout_phase_copa(room: dict):
         comp["phases"].append({"name": "Final — Volta", "matches": f_l2})
         return
     if cur_phase["name"] == "Final — Volta":
+        m = cur_phase["matches"][0]
         tie = comp["ties"]["final_0"]
+        update_tie_after_leg(tie, m)
         comp["winner_id"] = tie_winner(tie)
         comp["status"] = "completed"
 
@@ -787,8 +789,7 @@ async def simulate_phase(code: str, comp_id: str):
                     else: m["away_score"] += 1
                 m["emitted"].append(ev)
                 tick_events.append({"matchIdx": m_idx, "event": ev, "home_score": m["home_score"], "away_score": m["away_score"]})
-        if tick_events:
-            await broadcast(code, "tick", {"minute": minute, "events": tick_events})
+        await broadcast(code, "tick", {"minute": minute, "events": tick_events})
             
     if comp["type"] == "league":
         for m in matches:

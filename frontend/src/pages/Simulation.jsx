@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useRoomSocket } from "../lib/useRoomSocket";
@@ -21,67 +21,136 @@ const COMP_LABELS = {
   sulamericana: "Sul-Americana",
 };
 
+// Separated match card to avoid re-rendering all cards on every tick
+const MatchCard = React.memo(({ m, idx, minute, isMine }) => (
+  <div
+    className={`glass p-4 ${isMine ? "border-[var(--neon)] border-2" : ""}`}
+    data-testid={`match-card-${idx}`}
+  >
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex-1 min-w-0">
+        <div className="font-oswald uppercase tracking-wider text-xs text-slate-400">
+          {m.neutral ? "Neutro" : "Mandante"}
+        </div>
+        <div className="font-anton uppercase text-lg truncate" title={m.home_name}>
+          {m.home_name}
+        </div>
+      </div>
+      <div className="text-center px-3">
+        <div className="font-anton text-3xl">
+          {m.home_score}<span className="text-slate-500 mx-1">×</span>{m.away_score}
+        </div>
+        {minute >= 90 ? (
+          <div className="text-[10px] font-oswald uppercase tracking-wider text-slate-400">
+            Encerrado
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-1 text-[10px] font-oswald uppercase text-slate-400">
+            <span className="live-dot" /> {minute}{"'"}
+          </div>
+        )}
+        {m.leg && (
+          <div className="text-[9px] font-oswald uppercase tracking-widest text-slate-500 mt-0.5">
+            Jogo {m.leg}
+          </div>
+        )}
+      </div>
+      <div className="flex-1 text-right min-w-0">
+        <div className="font-oswald uppercase tracking-wider text-xs text-slate-400">
+          {m.neutral ? "Neutro" : "Visitante"}
+        </div>
+        <div className="font-anton uppercase text-lg truncate" title={m.away_name}>
+          {m.away_name}
+        </div>
+      </div>
+    </div>
+    <div className="mt-2 text-xs font-oswald text-slate-300 space-y-0.5">
+      {(m.currentEvents || []).slice(-2).map((ev, i) => (
+        <div key={i}>
+          {ev.flavor ? (
+            <span className="text-slate-500">
+              {ev.minute}{"'"} {ev.flavor === "yellow" ? "🟨 amarelo" :
+                ev.flavor === "save" ? "🧤 defesa" : "💨 quase!"}
+            </span>
+          ) : (
+            <span className="text-[var(--neon)]">
+              {ev.minute}{"'"} ⚽ {ev.player_name || ev.scorer}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  </div>
+));
+
 export default function Simulation() {
   const { code } = useParams();
   const nav = useNavigate();
   const playerId = localStorage.getItem(`38-0:pid:${code}`);
 
+  // Use a ref for minute to avoid re-renders on every tick
+  const minuteRef = useRef(0);
   const [minute, setMinute] = useState(0);
   const [matches, setMatches] = useState([]);
-  const [flashIdx, setFlashIdx] = useState(null);
   const [goalFeed, setGoalFeed] = useState([]);
-  const [activeTab, setActiveTab] = useState("league"); // Já existente
-  const [showSquads, setShowSquads] = useState(false); // Já existente
-  const [localStatus, setLocalStatus] = useState(null); // <--- ADICIONE ESTA LINHA
-  const flashTimer = useRef(null);
+  const [activeTab, setActiveTab] = useState("league");
+  const [showSquads, setShowSquads] = useState(false);
+  const [localStatus, setLocalStatus] = useState(null);
 
-  const handleEvent = (msg) => {
+  const handleEvent = useCallback((msg) => {
     if (msg.type === "round_start") {
+      minuteRef.current = 0;
       setMinute(0);
       setMatches(msg.payload.matches.map((m) => ({ ...m, currentEvents: [] })));
       setGoalFeed([]);
-      // auto-focus the active tab
       if (msg.payload.comp_id) setActiveTab(msg.payload.comp_id);
     } else if (msg.type === "tick") {
-  setMinute(msg.payload.minute);
-  setMatches((prev) =>
-    prev.map((m, idx) => {
-      const tickEv = msg.payload.events.filter((e) => e.matchIdx === idx);
-      let hs = m.home_score;
-      let as_ = m.away_score;
-      if (tickEv.length > 0) {
-        hs = tickEv[tickEv.length - 1].home_score ?? hs;
-        as_ = tickEv[tickEv.length - 1].away_score ?? as_;
+      // Only update minute state every 5 minutes to reduce renders
+      // but always keep ref updated for accurate display
+      minuteRef.current = msg.payload.minute;
+      if (msg.payload.minute % 5 === 0 || msg.payload.minute >= 90) {
+        setMinute(msg.payload.minute);
       }
-      return {
-        ...m,
-        home_score: hs,
-        away_score: as_,
-        currentEvents: [...(m.currentEvents || []), ...tickEv.map((e) => e.event)],
-      };
-    })
-  );
-  msg.payload.events.forEach((e) => {
-    if (e.event && !e.event.flavor) {
-      setFlashIdx(e.matchIdx);
-      clearTimeout(flashTimer.current);
-      flashTimer.current = setTimeout(() => setFlashIdx(null), 1300);
-      setGoalFeed((prev) =>
-        [
-          {
-            key: `${e.matchIdx}-${e.event.minute}-${Math.random()}`,
-            minute: e.event.minute,
-            scorer: e.event.player_name,
-          },
-          ...prev,
-        ].slice(0, 30)
-      );
-    }
-  });
-} else if (msg.type === "sim_complete") {
+
+      const events = msg.payload.events;
+      if (events.length > 0) {
+        setMatches((prev) =>
+          prev.map((m, idx) => {
+            const tickEv = events.filter((e) => e.matchIdx === idx);
+            if (tickEv.length === 0) return m;
+            const last = tickEv[tickEv.length - 1];
+            return {
+              ...m,
+              home_score: last.home_score ?? m.home_score,
+              away_score: last.away_score ?? m.away_score,
+              currentEvents: [...(m.currentEvents || []), ...tickEv.map((e) => e.event)],
+            };
+          })
+        );
+
+        const goals = events.filter((e) => e.event && !e.event.flavor);
+        if (goals.length > 0) {
+          setGoalFeed((prev) =>
+            [
+              ...goals.map((e) => ({
+                key: `${e.matchIdx}-${e.event.minute}-${Math.random()}`,
+                minute: e.event.minute,
+                scorer: e.event.player_name,
+              })),
+              ...prev,
+            ].slice(0, 30)
+          );
+        }
+      }
+
+      // Update minute display at end of match
+      if (msg.payload.minute >= 90) {
+        setMinute(90);
+      }
+    } else if (msg.type === "sim_complete") {
       toast.success("Temporada finalizada!");
     }
-  };
+  }, []);
 
   const { state } = useRoomSocket(code, playerId, handleEvent);
 
@@ -98,27 +167,25 @@ export default function Simulation() {
   const compStatus = runningComp?.status || "ready";
   const isPlaying = compStatus === "playing";
 
-  // When the active running comp changes, sync the tab to it
   useEffect(() => {
     if (sim?.active && sim.active !== "completed") {
       setActiveTab(sim.active);
     }
   }, [sim?.active]);
 
-  // Nova função para buscar os dados direto do banco de dados se o socket cair
   const fetchCurrentRoom = async () => {
     try {
-      // Faz uma requisição GET para trazer a sala atualizada com as partidas criadas
-      const response = await api.getRoom(code); 
+      const response = await api.getRoom(code);
       if (response?.data?.sim) {
-        // Se a sua API retornar a estrutura da simulação, você pode forçar as partidas na tela:
         const activeCompId = response.data.sim.active || "league";
         setActiveTab(activeCompId);
-        
         const currentComp = response.data.sim.competitions?.[activeCompId];
         const currentPhaseIdx = currentComp?.currentPhaseIdx ?? 0;
         if (currentComp?.phases?.[currentPhaseIdx]?.matches) {
-          setMatches(currentComp.phases[currentPhaseIdx].matches);
+          setMatches(currentComp.phases[currentPhaseIdx].matches.map((m) => ({
+            ...m,
+            currentEvents: [],
+          })));
         }
       }
     } catch (e) {
@@ -126,7 +193,6 @@ export default function Simulation() {
     }
   };
 
-  // Efeito para disparar a busca caso o status mude para simulando
   useEffect(() => {
     if (status === "simulating") {
       fetchCurrentRoom();
@@ -136,16 +202,10 @@ export default function Simulation() {
   const startSim = async () => {
     try {
       await api.startSim(code, playerId);
-      
-      // 1. Força o status local para mudar a tela visualmente na hora
-      setLocalStatus("simulating"); 
-      
-      // 2. Busca as partidas criadas direto da API (banco de dados)
-      await fetchCurrentRoom(); 
-      
+      setLocalStatus("simulating");
+      await fetchCurrentRoom();
       toast.success("Temporada iniciada!");
     } catch (e) {
-      // Se der erro 400 porque já está rodando, faz a mesma coisa para destravar a tela
       if (e.response?.status === 400) {
         setLocalStatus("simulating");
         await fetchCurrentRoom();
@@ -170,6 +230,7 @@ export default function Simulation() {
       toast.error(e.response?.data?.detail || "Erro ao alterar velocidade");
     }
   };
+
   const restart = async () => {
     try {
       await api.restart(code, playerId);
@@ -183,6 +244,19 @@ export default function Simulation() {
     if (!activeComp?.standings) return [];
     return Object.values(activeComp.standings);
   }, [activeComp?.standings]);
+
+  // Split matches: user's match first, then the rest
+  const { myMatch, myMatchIdx, otherMatches } = useMemo(() => {
+    const myIdx = matches.findIndex(
+      (m) => m.home_id === playerId || m.away_id === playerId
+    );
+    if (myIdx === -1) return { myMatch: null, myMatchIdx: -1, otherMatches: matches };
+    return {
+      myMatch: matches[myIdx],
+      myMatchIdx: myIdx,
+      otherMatches: matches.filter((_, i) => i !== myIdx),
+    };
+  }, [matches, playerId]);
 
   if (!state) {
     return (
@@ -251,30 +325,20 @@ export default function Simulation() {
             </div>
           ))}
         </div>
-
         <div className="max-w-6xl mx-auto space-y-6">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <h2 className="font-anton uppercase text-3xl">Resumo</h2>
             <div className="flex gap-3">
-              <button
-                className="btn-ghost"
-                onClick={() => setShowSquads((s) => !s)}
-                data-testid="finished-show-squads-button"
-              >
+              <button className="btn-ghost" onClick={() => setShowSquads((s) => !s)} data-testid="finished-show-squads-button">
                 {showSquads ? "Ocultar Elencos" : "Ver Elencos"}
               </button>
               {isHost && (
-                <button
-                  className="btn-neon"
-                  onClick={restart}
-                  data-testid="finished-replay-button"
-                >
+                <button className="btn-neon" onClick={restart} data-testid="finished-replay-button">
                   Jogar Novamente
                 </button>
               )}
             </div>
           </div>
-
           {showSquads && (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {state.teams.map((t) => (
@@ -282,7 +346,6 @@ export default function Simulation() {
               ))}
             </div>
           )}
-
           <StandingsTable
             standings={Object.values(sim?.competitions?.league?.standings || {})}
             myTeamId={playerId}
@@ -355,9 +418,7 @@ export default function Simulation() {
               data-testid={`tab-${cid}`}
             >
               {COMP_LABELS[cid]}
-              {c?.status === "completed" && c.winner_id && (
-                <span className="ml-2">🏆</span>
-              )}
+              {c?.status === "completed" && c.winner_id && <span className="ml-2">🏆</span>}
             </button>
           );
         })}
@@ -377,14 +438,9 @@ export default function Simulation() {
                   {phasesPlayed}/{totalPhases || "?"} fases
                 </div>
               </div>
-              {/* Next round button */}
               {isHost && activeTab === activeRunningCompId && compStatus !== "playing" &&
                 runningComp && runningComp.status !== "completed" && (
-                  <button
-                    className="btn-neon"
-                    onClick={nextRound}
-                    data-testid="sim-next-round-button"
-                  >
+                  <button className="btn-neon" onClick={nextRound} data-testid="sim-next-round-button">
                     {compStatus === "ready" ? "Iniciar 1ª Rodada" : "Próxima Rodada"}
                   </button>
                 )}
@@ -396,77 +452,38 @@ export default function Simulation() {
             </div>
           )}
 
-          {/* When this tab is the active running competition show live matches */}
+          {/* Live matches */}
           {activeTab === activeRunningCompId && matches.length > 0 && (
-            <div className="grid sm:grid-cols-2 gap-3" data-testid="sim-live-matches">
-              {matches.map((m, idx) => {
-                const isMine = m.home_id === playerId || m.away_id === playerId;
-                return (
-                  <div
-                    key={`${m.home_id}-${m.away_id}-${idx}`}
-                    className={`glass p-4 ${flashIdx === idx ? "goal-flash" : ""} ${isMine ? "border-[var(--neon)] border" : ""}`}
-                    data-testid={`match-card-${idx}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-oswald uppercase tracking-wider text-xs text-slate-400">
-                          {m.neutral ? "Neutro" : "Mandante"}
-                        </div>
-                        <div className="font-anton uppercase text-lg truncate" title={m.home_name}>
-                          {m.home_name}
-                        </div>
-                      </div>
-                      <div className="text-center px-3">
-                        <div className="font-anton text-3xl">
-                          {m.home_score}<span className="text-slate-500 mx-1">×</span>{m.away_score}
-                        </div>
-                        {minute >= 90 ? (
-                          <div className="text-[10px] font-oswald uppercase tracking-wider text-slate-400">
-                            Encerrado
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center gap-1 text-[10px] font-oswald uppercase text-slate-400">
-                            <span className="live-dot" /> {minute}{"'"}
-                          </div>
-                        )}
-                        {m.leg && (
-                          <div className="text-[9px] font-oswald uppercase tracking-widest text-slate-500 mt-0.5">
-                            Jogo {m.leg}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 text-right min-w-0">
-                        <div className="font-oswald uppercase tracking-wider text-xs text-slate-400">
-                          {m.neutral ? "Neutro" : "Visitante"}
-                        </div>
-                        <div className="font-anton uppercase text-lg truncate" title={m.away_name}>
-                          {m.away_name}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-2 text-xs font-oswald text-slate-300 space-y-0.5">
-                      {(m.currentEvents || []).slice(-2).map((ev, i) => (
-                        <div key={i}>
-                          {ev.flavor ? (
-                            <span className="text-slate-500">
-                              {ev.minute}{"'"} {ev.flavor === "yellow" ? "🟨 amarelo" :
-                                ev.flavor === "save" ? "🧤 defesa" : "💨 quase!"}
-                            </span>
-                          ) : (
-                            <span className="text-[var(--neon)]">
-                              {ev.minute}{"'"} ⚽ {ev.scorer}
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+            <div className="space-y-3" data-testid="sim-live-matches">
+              {/* User's match — full width, highlighted */}
+              {myMatch && (
+                <div className="mb-1">
+                  <div className="text-[10px] font-oswald uppercase tracking-widest text-[var(--neon)] mb-2 px-1">
+                    ⚡ Seu jogo
                   </div>
-                );
-              })}
+                  <MatchCard m={myMatch} idx={myMatchIdx} minute={minute} isMine={true} />
+                </div>
+              )}
+
+              {/* Other matches — 2 column grid */}
+              {otherMatches.length > 0 && (
+                <>
+                  {myMatch && (
+                    <div className="text-[10px] font-oswald uppercase tracking-widest text-slate-500 px-1 pt-1">
+                      Outras partidas
+                    </div>
+                  )}
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {otherMatches.map((m, idx) => (
+                      <MatchCard key={`${m.home_id}-${m.away_id}-${idx}`} m={m} idx={idx} minute={minute} isMine={false} />
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
-          {/* Standings / Bracket per competition */}
+          {/* Standings / Bracket */}
           {activeComp?.type === "league" && (
             <StandingsTable standings={standingsList} myTeamId={playerId} />
           )}
