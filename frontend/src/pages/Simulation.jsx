@@ -21,7 +21,6 @@ const COMP_LABELS = {
   sulamericana: "Sul-Americana",
 };
 
-// Separated match card to avoid re-rendering all cards on every tick
 const MatchCard = React.memo(({ m, idx, minute, isMine }) => (
   <div
     className={`glass p-4 ${isMine ? "border-[var(--neon)] border-2" : ""}`}
@@ -88,11 +87,9 @@ export default function Simulation() {
   const nav = useNavigate();
   const playerId = localStorage.getItem(`38-0:pid:${code}`);
 
-  // Use a ref for minute to avoid re-renders on every tick
   const minuteRef = useRef(0);
   const [minute, setMinute] = useState(0);
   const [matches, setMatches] = useState([]);
-  const [goalFeed, setGoalFeed] = useState([]);
   const [activeTab, setActiveTab] = useState("league");
   const [showSquads, setShowSquads] = useState(false);
   const [localStatus, setLocalStatus] = useState(null);
@@ -102,16 +99,12 @@ export default function Simulation() {
       minuteRef.current = 0;
       setMinute(0);
       setMatches(msg.payload.matches.map((m) => ({ ...m, currentEvents: [] })));
-      setGoalFeed([]);
       if (msg.payload.comp_id) setActiveTab(msg.payload.comp_id);
     } else if (msg.type === "tick") {
-      // Only update minute state every 5 minutes to reduce renders
-      // but always keep ref updated for accurate display
       minuteRef.current = msg.payload.minute;
       if (msg.payload.minute % 5 === 0 || msg.payload.minute >= 90) {
         setMinute(msg.payload.minute);
       }
-
       const events = msg.payload.events;
       if (events.length > 0) {
         setMatches((prev) =>
@@ -127,26 +120,8 @@ export default function Simulation() {
             };
           })
         );
-
-        const goals = events.filter((e) => e.event && !e.event.flavor);
-        if (goals.length > 0) {
-          setGoalFeed((prev) =>
-            [
-              ...goals.map((e) => ({
-                key: `${e.matchIdx}-${e.event.minute}-${Math.random()}`,
-                minute: e.event.minute,
-                scorer: e.event.player_name,
-              })),
-              ...prev,
-            ].slice(0, 30)
-          );
-        }
       }
-
-      // Update minute display at end of match
-      if (msg.payload.minute >= 90) {
-        setMinute(90);
-      }
+      if (msg.payload.minute >= 90) setMinute(90);
     } else if (msg.type === "sim_complete") {
       toast.success("Temporada finalizada!");
     }
@@ -166,6 +141,13 @@ export default function Simulation() {
   const runningComp = sim?.competitions?.[activeRunningCompId];
   const compStatus = runningComp?.status || "ready";
   const isPlaying = compStatus === "playing";
+
+  const topScorers = useMemo(() => {
+    if (!sim?.scorers) return [];
+    return Object.values(sim.scorers)
+      .sort((a, b) => b.goals - a.goals)
+      .slice(0, 5);
+  }, [sim?.scorers]);
 
   useEffect(() => {
     if (sim?.active && sim.active !== "completed") {
@@ -189,14 +171,12 @@ export default function Simulation() {
         }
       }
     } catch (e) {
-      console.error("Erro ao buscar dados de segurança da sala:", e);
+      console.error("Erro ao buscar dados da sala:", e);
     }
   };
 
   useEffect(() => {
-    if (status === "simulating") {
-      fetchCurrentRoom();
-    }
+    if (status === "simulating") fetchCurrentRoom();
   }, [status]);
 
   const startSim = async () => {
@@ -245,7 +225,6 @@ export default function Simulation() {
     return Object.values(activeComp.standings);
   }, [activeComp?.standings]);
 
-  // Split matches: user's match first, then the rest
   const { myMatch, myMatchIdx, otherMatches } = useMemo(() => {
     const myIdx = matches.findIndex(
       (m) => m.home_id === playerId || m.away_id === playerId
@@ -266,7 +245,7 @@ export default function Simulation() {
     );
   }
 
-  // -------------------- READY TO SIM SCREEN --------------------
+  // -------------------- READY TO SIM --------------------
   if (status === "ready_to_sim") {
     return (
       <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6 py-10">
@@ -299,7 +278,7 @@ export default function Simulation() {
     );
   }
 
-  // -------------------- FINISHED SCREEN --------------------
+  // -------------------- FINISHED --------------------
   if (status === "finished") {
     const trophies = ["league", "copa_brasil", "libertadores", "sulamericana"]
       .map((id) => sim?.competitions?.[id])
@@ -339,6 +318,22 @@ export default function Simulation() {
               )}
             </div>
           </div>
+          {topScorers.length > 0 && (
+            <div className="glass p-5">
+              <h3 className="font-anton uppercase text-xl mb-4">Artilharia da Temporada</h3>
+              <div className="space-y-3">
+                {topScorers.map((s, i) => (
+                  <div key={s.name} className="flex items-center gap-3">
+                    <span className="font-anton text-2xl w-8 text-slate-500">{i + 1}</span>
+                    <span className="flex-1 font-oswald uppercase tracking-wide">{s.name}</span>
+                    <span className="font-anton text-xl" style={{ color: "var(--neon)" }}>
+                      {s.goals} ⚽
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {showSquads && (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {state.teams.map((t) => (
@@ -355,7 +350,7 @@ export default function Simulation() {
     );
   }
 
-  // -------------------- LIVE SIMULATION SCREEN --------------------
+  // -------------------- LIVE SIMULATION --------------------
   const phasesPlayed = (activeComp?.currentPhaseIdx ?? -1) + (compStatus === "playing" ? 0 : 1);
   const totalPhases = activeComp?.phases?.length || 0;
   const currentPhaseName = activeComp?.phases?.[activeComp?.currentPhaseIdx]?.name;
@@ -424,10 +419,8 @@ export default function Simulation() {
         })}
       </div>
 
-      {/* Active competition content */}
-      <div className="grid lg:grid-cols-[1fr_360px] gap-6">
+      <div className="grid lg:grid-cols-[1fr_300px] gap-6">
         <div className="space-y-4">
-          {/* Phase bar */}
           {activeComp && (
             <div className="glass px-4 py-3 flex items-center justify-between flex-wrap gap-3">
               <div>
@@ -452,10 +445,8 @@ export default function Simulation() {
             </div>
           )}
 
-          {/* Live matches */}
           {activeTab === activeRunningCompId && matches.length > 0 && (
             <div className="space-y-3" data-testid="sim-live-matches">
-              {/* User's match — full width, highlighted */}
               {myMatch && (
                 <div className="mb-1">
                   <div className="text-[10px] font-oswald uppercase tracking-widest text-[var(--neon)] mb-2 px-1">
@@ -464,8 +455,6 @@ export default function Simulation() {
                   <MatchCard m={myMatch} idx={myMatchIdx} minute={minute} isMine={true} />
                 </div>
               )}
-
-              {/* Other matches — 2 column grid */}
               {otherMatches.length > 0 && (
                 <>
                   {myMatch && (
@@ -483,7 +472,6 @@ export default function Simulation() {
             </div>
           )}
 
-          {/* Standings / Bracket */}
           {activeComp?.type === "league" && (
             <StandingsTable standings={standingsList} myTeamId={playerId} />
           )}
@@ -524,22 +512,38 @@ export default function Simulation() {
           )}
         </div>
 
-        {/* Side panel: goal feed */}
+        {/* Side panel: top scorers */}
         <aside className="glass p-4 h-fit lg:sticky lg:top-4">
-          <h3 className="font-anton uppercase text-xl mb-3">Mural de Gols</h3>
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
-            {goalFeed.length === 0 && (
-              <div className="text-slate-500 text-sm">Nenhum gol ainda nesta rodada.</div>
-            )}
-            {goalFeed.map((g) => (
-              <div key={g.key} className="flex items-center gap-2 text-sm font-oswald">
-                <span className="font-anton text-[var(--neon)] w-10">{g.minute}{"'"}</span>
-                <span>⚽ {g.scorer}</span>
-              </div>
-            ))}
-          </div>
+          <h3 className="font-anton uppercase text-xl mb-4">Artilharia</h3>
+          {topScorers.length === 0 ? (
+            <div className="text-slate-500 text-sm font-oswald">Nenhum gol ainda.</div>
+          ) : (
+            <div className="space-y-3">
+              {topScorers.map((s, i) => (
+                <div key={s.name} className="flex items-center gap-3">
+                  <span
+                    className="font-anton text-xl w-6 text-center"
+                    style={{ color: i === 0 ? "var(--neon)" : "#64748b" }}
+                  >
+                    {i + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-oswald uppercase tracking-wide text-sm truncate">
+                      {s.name}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="font-anton text-xl" style={{ color: "var(--neon)" }}>
+                      {s.goals}
+                    </span>
+                    <span className="text-xs">⚽</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {isHost && (
-            <div className="mt-5 pt-4 border-t border-white/5">
+            <div className="mt-6 pt-4 border-t border-white/5">
               <button
                 className="btn-ghost w-full text-xs"
                 onClick={() => {

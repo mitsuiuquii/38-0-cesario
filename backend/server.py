@@ -139,9 +139,10 @@ def sim_public(sim: dict) -> dict:
             "winner_id": comp.get("winner_id"), "teamIds": comp.get("teamIds", []),
         }
     return {
-        "active": sim["active"], "teams": sim["teams"], "competitions": comps_pub,
-        "currentMinute": sim.get("currentMinute", 0), "currentMatches": sim.get("currentMatches", []),
-    }
+    "active": sim["active"], "teams": sim["teams"], "competitions": comps_pub,
+    "currentMinute": sim.get("currentMinute", 0), "currentMatches": sim.get("currentMatches", []),
+    "scorers": sim.get("scorers", {}),  # ← adicione esta linha
+}
 
 async def broadcast(code: str, kind: str = "state", payload: Optional[dict] = None):
     if code not in WS_CONNS:
@@ -785,11 +786,20 @@ async def simulate_phase(code: str, comp_id: str):
             fired = [e for e in m["events"] if e["minute"] == minute]
             for ev in fired:
                 if "flavor" not in ev:
-                    if ev["team"] == "home": m["home_score"] += 1
-                    else: m["away_score"] += 1
+                    if ev["team"] == "home":
+                        m["home_score"] += 1
+                        scorer_name = ev.get("player_name", "")
+                    else:
+                        m["away_score"] += 1
+                        scorer_name = ev.get("player_name", "")
+        # Track scorer
+                    if scorer_name:
+                        scorers = sim.setdefault("scorers", {})
+                        if scorer_name not in scorers:
+                            scorers[scorer_name] = {"name": scorer_name, "goals": 0}
+                        scorers[scorer_name]["goals"] += 1
                 m["emitted"].append(ev)
                 tick_events.append({"matchIdx": m_idx, "event": ev, "home_score": m["home_score"], "away_score": m["away_score"]})
-        await broadcast(code, "tick", {"minute": minute, "events": tick_events})
             
     if comp["type"] == "league":
         for m in matches:
@@ -903,7 +913,8 @@ async def init_season(code: str, req: HostUpdateReq):
         "competitions": {"league": league_comp},
         "currentMinute": 0,
         "currentMatches": [],
-    }
+        "scorers": {},  # ← adicione esta linha
+}
     room["status"] = "simulating"
 
     await broadcast(code, "state")
