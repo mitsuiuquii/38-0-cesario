@@ -1,5 +1,6 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "yarn build",
+  "installCommand": "yarn install",
   "outputDirectory": "build",
   "cleanUrls": true,
   "rewrites": [
